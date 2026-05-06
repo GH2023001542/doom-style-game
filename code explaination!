@@ -1,0 +1,23 @@
+settings.py — The config file. Every magic number lives here: screen resolution (1600×900), FOV (60°), player speed, mouse sensitivity, texture size, gravity-like constants. Every other file imports from it with from settings import *, so changing one value here affects the whole game.
+
+main.py — The game's backbone. The Game class owns everything else — it creates all the systems, then runs the game loop: check_events() → update() → draw() forever at 60fps. delta_time is stored here so all movement is frame-rate independent (moves the same speed whether the PC is fast or slow). There's also a global_trigger — a timer that fires every 40ms to drive animations like flickering lights.
+
+map.py — The level. The map is just a 2D Python list where numbers mean walls (1–5 = different textures) and False/0 means empty space. get_map() converts that grid into a dictionary of (x,y): texture_id pairs so the raycaster can do fast lookups. The draw() method is commented out — it was used for debugging the minimap.
+
+raycasting.py — The most technically impressive file. This is what makes the game look 3D. It fires one ray per screen column (800 rays for a 1600px wide screen), checking both horizontal and vertical wall intersections using DDA (Digital Differential Analysis). For each ray it figures out: how far away the wall is, which texture to use, and which column of that texture to show. Walls that are close appear tall; far walls appear short. It also fixes the "fishbowl effect" — without the depth * cos(angle) correction, walls would look curved.
+
+object_renderer.py — Draws everything you see on screen. First it draws the scrolling sky texture and flat grey floor, then it takes all the walls and sprites from raycasting (already sorted back-to-front by depth) and blits them onto the screen. It also handles the HUD: health displayed as PNG digit images, blood-screen flash when you're hit, and game-over/win screens.
+
+player.py — Handles all player logic. WASD movement uses sin/cos of the player's angle so you always move in the direction you're facing. There's diagonal movement correction (moving diagonally at full speed would be ~40% faster, so it multiplies by 1/√2). Mouse look rotates the player angle. Wall collision is checked separately for X and Y axes so you can slide along walls. Health slowly regenerates over time.
+
+sprite_object.py — The base class for anything that isn't a wall. Sprites in DOOM-style games are flat 2D images that always face the player (called "billboards"). This class calculates the angle between the sprite and the player, projects it onto the screen, scales it based on distance, and adds it to the raycasting render list so it gets depth-sorted with walls.
+
+npc.py — Extends sprite_object.py with a full AI state machine. Each NPC can be in one of these states: idle (wandering), walk (chasing), attack (shooting), pain (just got hit), or death. NPCs have their own mini-raycaster (ray_cast_player_npc) to check if there's a clear line of sight to you — they won't shoot through walls. Three enemy types are defined: SoldierNPC (basic), CacoDemonNPC (tanky melee), CyberDemonNPC (fast, high health).
+
+pathfinding.py — Gives enemies their navigation. It builds a graph of all walkable tiles, then uses BFS (Breadth-First Search) to find the shortest path from any NPC to the player. Results are cached with @lru_cache so it doesn't recalculate the same path twice. NPCs avoid tiles where other NPCs are standing so they don't pile up.
+
+object_handler.py — The level manager. It spawns 20 random enemies (70% soldiers, 20% cacodemon, 10% cyberdemon) in random walkable tiles outside a "safe zone" near your spawn. It also manually places all the animated light sprites around the map. Every frame it updates all sprites and NPCs, and checks if all enemies are dead (win condition).
+
+weapon.py — The shotgun. It's actually a subclass of AnimatedSprite — the weapon is just a sprite pinned to the bottom centre of the screen. When you click, it plays a 6-frame fire animation, deals 50 damage to whatever NPC is in the crosshair, and locks out further shots until the animation completes (the reload).
+
+sound.py — Simple sound loader. Loads all .wav and .mp3 files from resources/sound/ and hands out references (shotgun, npc_pain, etc.) that other classes call .play() on. The background music loops infinitely at 30% volume.
